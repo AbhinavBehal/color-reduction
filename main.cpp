@@ -46,7 +46,6 @@ void segmentImage(sf::Image &im, int k, int iter)
         gm[i] = colors[4*(px + py*width) + 1];
         bm[i] = colors[4*(px + py*width) + 2];
     }
-    sf::Clock clock;
     while(currentIteration++ < maxIterations)
     {
         std::vector<std::vector<int>> sums(k, std::vector<int>(3, 0));
@@ -83,7 +82,6 @@ void segmentImage(sf::Image &im, int k, int iter)
             }
         }
     }
-    std::cout << clock.restart().asSeconds() << std::endl;
 
     sf::Image out;
     out.create(width, height);
@@ -98,17 +96,24 @@ void segmentImage(sf::Image &im, int k, int iter)
     im = out;
 }
 
-int main()
+int main(int argc, char** argv)
 {
     srand(time(0));
-
-    std::string filename = "IMG_0396.JPG";
+    sf::err().rdbuf(0);
+    if(argc != 5) {
+        std::cout << "Usage: <input filename> <iterations> <number of colors> <output filename>" << std::endl;
+        return -1;
+    }
+    std::string filename = argv[1];
     sf::Image im;
-    im.loadFromFile(filename);
+    if(!im.loadFromFile(filename)) {
+        std::cout << filename << " not found" << std::endl;
+        return -1;
+    }
 
-    segmentImage(im, 3, 15);
+    segmentImage(im, atoi(argv[3]), atoi(argv[2]));
 
-    im.saveToFile("output.png");
+    im.saveToFile(argv[4]);
 
     return 0;
 }
