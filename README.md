@@ -1,5 +1,5 @@
 # ImageColorSegmentation
-Uses K-means clustering to reduce the number of colors in the image.
+Uses K-means clustering to reduce the number of colors in an image.
 SFML is used to handle images, but you could easily change it to another image library since only basic functions like loading/saving images and getting/setting pixels are used.
 May take some time to run if your image or the number of iterations is large.
 
