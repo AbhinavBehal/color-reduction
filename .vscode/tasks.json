@@ -1,0 +1,36 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"command": "g++",
+	"type": "shell",
+	"presentation": {
+		"echo": true,
+		"reveal": "always",
+		"focus": false,
+		"panel": "shared",
+		"showReuseMessage": true
+	},
+	"args": [
+		"-O3",
+		"-g",
+		"-DSFML_STATIC",
+		"-o",
+		"main.exe",
+		"-static",
+		"-std=c++11",
+		"main.cpp",
+		"-IC:/SFML-2.5.0/include",
+		"-LC:/SFML-2.5.0/lib",
+		"-lsfml-graphics-s",
+		"-lfreetype",
+		"-lsfml-window-s",
+		"-lopengl32",
+		"-lgdi32",
+		"-lsfml-system-s",
+		"-lwinmm"
+	],
+	"problemMatchers": [
+		"$gcc"
+	],
+}

@@ -1,119 +1,133 @@
-#include <SFML/Graphics.hpp>
+#include <array>
 #include <iostream>
+#include <limits>
+#include <random>
+#include <utility>
 #include <vector>
-#include <cstdlib>
-#include <ctime>
 
-int indexOfMinDist(int r, int g, int b, int rm[], int bm[], int gm[], int k)
-{
-    int lowestDist = INT_MAX;
-    int lowestIndex = 0;
-    for(int i = 0; i < k; ++i)
-    {
-        int dr = rm[i] - r;
-        int dg = gm[i] - g;
-        int db = bm[i] - b;
-        int currentDist = dr*dr + dg*dg + db*db;
-        if(currentDist < lowestDist)
-        {
-            lowestDist = currentDist;
-            lowestIndex = i;
-        }
+#include <SFML/Graphics.hpp>
+
+class Cluster {
+  private:
+    std::array<int, 3> sum;
+    int size;
+
+  public:
+    sf::Color color;
+
+    Cluster(const sf::Color &c) : color{c}, sum{}, size{0} {}
+
+    void add_color(const sf::Color &c) {
+        sum[0] += c.r;
+        sum[1] += c.g;
+        sum[2] += c.b;
+        ++size;
     }
-    return lowestIndex;
+
+    bool update() {
+        if (size > 0) {
+            auto prev = color;
+            color = {sum[0] / size, sum[1] / size, sum[2] / size};
+            sum = {0, 0, 0};
+            size = 0;
+            return color != prev;
+        }
+        return false;
+    }
+};
+
+sf::Color read_color(const sf::Uint8 *pixels, int x, int y, int width) {
+    return {pixels[4 * (x + y * width) + 0], pixels[4 * (x + y * width) + 1],
+            pixels[4 * (x + y * width) + 2]};
 }
 
-void segmentImage(sf::Image &im, int k, int iter)
-{
-    int rm[k];
-    int gm[k];
-    int bm[k];
-
-    int width = im.getSize().x;
-    int height = im.getSize().y;
-    int maxIterations = iter;
-    int currentIteration = 0;
-
-    std::vector<int> indices(width*height, 0);
-    const sf::Uint8 *colors = im.getPixelsPtr();
-
-    for(int i = 0; i < k; ++i)
-    {
-        int px = rand() % width;///Generate random points to start the means off
-        int py = rand() % height;
-
-        rm[i] = colors[4*(px + py*width) + 0];
-        gm[i] = colors[4*(px + py*width) + 1];
-        bm[i] = colors[4*(px + py*width) + 2];
+int closest_index(const sf::Color &color,
+                  const std::vector<Cluster> &clusters) {
+    int min_dist = std::numeric_limits<int>::max();
+    int index = 0;
+    for (auto it = clusters.begin(); it != clusters.end(); ++it) {
+        int dr = it->color.r - color.r;
+        int dg = it->color.g - color.g;
+        int db = it->color.b - color.b;
+        int dist = dr * dr + dg * dg + db * db;
+        if (dist < min_dist) {
+            min_dist = dist;
+            index = std::distance(clusters.begin(), it);
+        }
     }
-    while(currentIteration++ < maxIterations)
-    {
-        std::vector<std::vector<int>> sums(k, std::vector<int>(3, 0));
-        std::vector<int> clusterSize(k, 0);
-        for(int y = 0; y < height; ++y)
-        {
-            for(int x = 0; x < width; ++x)
-            {
-                int r = colors[4*(x + y*width) + 0];
-                int g = colors[4*(x + y*width) + 1];
-                int b = colors[4*(x + y*width) + 2];
+    return index;
+}
 
-                int index = indexOfMinDist(r, g, b, rm, bm, gm, k);///Loop through the means and find the index
-                                                                   ///which gives the lowest distance value
-                sums[index][0] += r;
-                sums[index][1] += g;
-                sums[index][2] += b;
-                clusterSize[index]++;
+sf::Image reduce_colors(const sf::Image &image, int num_colors) {
+    std::mt19937 rng;
+    rng.seed(std::random_device()());
 
-                if(currentIteration == maxIterations - 1)///If it's the final iteration
-                {
-                    indices[x + y*width] = index; ///Add to the indices vector to save having to calculate indices again
-                }
+    const sf::Uint8 *pixels = image.getPixelsPtr();
+    const int width = image.getSize().x;
+    const int height = image.getSize().y;
+    // in case it takes too long to converge
+    const int max_iterations = 100;
+
+    std::uniform_int_distribution<std::mt19937::result_type> width_dist(0,
+                                                                        width);
+    std::uniform_int_distribution<std::mt19937::result_type> height_dist(
+        0, height);
+
+    std::vector<int> indices(width * height, 0);
+
+    std::vector<Cluster> clusters;
+    clusters.reserve(num_colors);
+
+    for (int i = 0; i < num_colors; ++i) {
+        // generate random points to start the clusters off
+        int x = width_dist(rng);
+        int y = height_dist(rng);
+        clusters.emplace_back(read_color(pixels, x, y, width));
+    }
+
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                auto color = read_color(pixels, x, y, width);
+                int index = closest_index(color, clusters);
+                clusters[index].add_color(color);
+                indices[x + y * width] = index;
             }
         }
-        for(int i = 0; i < k; ++i)///Recalculate cluster means by averaging corresponding pixel values
-        {
-            int currentSize = clusterSize.at(i);
-            if(currentSize > 0)
-            {
-                rm[i] = sums[i][0] / currentSize;
-                gm[i] = sums[i][1] / currentSize;
-                bm[i] = sums[i][2] / currentSize;
-            }
+
+        bool changed = false;
+        for (auto &cluster : clusters) {
+            if (cluster.update())
+                changed = true;
         }
+        if (!changed)
+            break;
     }
 
     sf::Image out;
     out.create(width, height);
-    for(int y = 0; y < height; ++y)
-    {
-        for(int x = 0; x < width; ++x)
-        {
-            int index = indices[x + y*width];
-            out.setPixel(x, y, sf::Color(rm[index], gm[index], bm[index]));
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int index = indices[x + y * width];
+            out.setPixel(x, y, clusters[index].color);
         }
     }
-    im = out;
+    return out;
 }
 
-int main(int argc, char** argv)
-{
-    srand(time(0));
-    sf::err().rdbuf(0);
-    if(argc != 5) {
-        std::cout << "Usage: <input filename> <iterations> <number of colors> <output filename>" << std::endl;
-        return -1;
-    }
-    std::string filename = argv[1];
-    sf::Image im;
-    if(!im.loadFromFile(filename)) {
-        std::cout << filename << " not found" << std::endl;
+int main(int argc, char **argv) {
+    if (argc != 4) {
+        std::cout << "Usage: <input_file> <number of colors> "
+                     "<output_file>"
+                  << std::endl;
         return -1;
     }
 
-    segmentImage(im, atoi(argv[3]), atoi(argv[2]));
+    sf::Image input_img;
+    if (!input_img.loadFromFile(argv[1]))
+        return -1;
 
-    im.saveToFile(argv[4]);
-
+    sf::Image output_img = reduce_colors(input_img, std::stoi(argv[2]));
+    output_img.saveToFile(argv[3]);
     return 0;
 }
